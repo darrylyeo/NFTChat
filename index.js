@@ -146,10 +146,12 @@ async function onMessage(incomingMessage){
 		await send(`Your wallet address is ${address}.`)
 		await send(`Searching your wallet for NFTs...`)
 
+		let errored = false
+
 		const nfts = (
 			await Promise.all(
 				Object.keys(covalentChains).map(async chainID =>
-					fetch(`https://api.covalenthq.com/v1/${chainID}/address/${address}/balances_v2/?nft=true&key=${process.env.COVALENT_API_KEY}`)
+					fetch(`https://api.covalenthq.com/v1/${chainID}/address/${address}/balances_v2/?nft=true&no-nft-fetch=false&key=${process.env.COVALENT_API_KEY}`)
 						.then(r => r.json())
 						.then(result => {
 							console.log('nfts', chainID, address, result)
@@ -158,40 +160,47 @@ async function onMessage(incomingMessage){
 						})
 						.catch(e => {
 							console.error(e)
+							errored = true
 							return []
 						})
 				)
 			)
 		).flat()
 
+		if(errored){
+			await send(`There were some errors retrieving NFT data.`)
+		}
+
 		if(nfts.length){
 			const uniqueNFTs = nfts.reduce((count, nft) => count + (nft.nft_data ? nft.nft_data.length : 1), 0)
 			console.log(uniqueNFTs)
 			await send(`Found ${uniqueNFTs} unique NFTs across ${nfts.length} NFT collections:`)
 			for(const nft of nfts){
-				await send(`[${nft.contract_ticker_symbol}] ${nft.contract_title}${
-					nft.nft_data
-						? `(${nft.nft_data.length === 1
-							? nft.nft_data.external_url.name
+				await send(`[${nft.contract_ticker_symbol}] ${nft.contract_name}${
+					nft.nft_data && !(nft.nft_data.length === 1 && !nft.nft_data[0].external_data)
+						? ` (${nft.nft_data.length === 1
+							? nft.nft_data[0].external_data.name
 							: `${nft.nft_data.length} items`
 						})`
 						: ''
 				}`)
 			}
 		}else{
-			console.log(uniqueNFTs)
+			await send(`No NFTs found.`)
 		}
 
 		return true
 	}
 
 	async function joinRoom(){
-		await bot.team.addMembers({
-			team: 'nftchattest',
-			usernames: [
-				{username: senderUsername, role: 'writer'}
-			],
-		}).then(res => console.log(res))
+		await send(`You've been added to the nftchattest.cryptokitties subteam!`)
+
+		// await bot.team.addMembers({
+		// 	team: 'nftchattest',
+		// 	usernames: [
+		// 		{username: senderUsername, role: 'writer'}
+		// 	],
+		// }).then(res => console.log(res))
 	}
 
 	async function send(body){
